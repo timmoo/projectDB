@@ -1,0 +1,151 @@
+$servers = Get-Content (($PSSCRIPTROOT).Substring(0,(($PSSCRIPTROOT).LastIndexOf("\"))+1) + "srv_sql.txt")
+
+foreach ($SQLServer in $servers) {
+$SQLDBName = "msdb"
+$SQL_Query = ""
+$uid ='sa'
+#$uid ='Логин администратора'
+$pwd = "пароль"
+$Sql_Query_path = 'D:\Report\sql_audit'
+$sql_query_file = 'SQL_Audit_report.txt'
+
+$SqlConnection = New-Object System.Data.SqlClient.SqlConnection
+# $SqlConnection.ConnectionString  = "Server = $SQLServer; Database = $SQLDBName;  User ID = $uid; Password = $pwd; trusted_connection=true;"
+ $SqlConnection.ConnectionString  = "Server = $SQLServer; Database = $SQLDBName;  User ID = $uid; Password = $pwd;" 
+
+$SQL_Query = GC $Sql_Query_path\$sql_query_file | Out-String
+
+ function Get-SQLQueryResult ($SqlQuery) #$SQLServer,$SQLDBName,$uid,$pwd)
+ 
+        {
+
+                $SqlCmd = New-Object System.Data.SqlClient.SqlCommand
+                $SqlCmd.Connection = $SqlConnection
+                $SqlCmd.CommandText = $SqlQuery
+
+
+                $SqlAdapter = New-Object System.Data.SqlClient.SqlDataAdapter
+                $SqlAdapter.SelectCommand = $SqlCmd
+                $DataSet = New-Object System.Data.DataSet
+                $SqlAdapter.Fill($DataSet)
+                $DataSet.Tables[0]
+                $SqlConnection.Close()
+                
+        }
+$report = Get-SQLQueryResult $SQL_Query 
+
+$rep_table = @()
+$i=0
+$obj = @()
+ 
+foreach ( $row in $report )
+    {
+   
+   $obj = New-Object PSOBject  
+        $i++
+        $obj | add-member -Type NoteProperty -Name ID -Value $i
+        $obj | add-member -Type NoteProperty -Name A -Value $row.A
+        $obj | add-member -Type NoteProperty -Name B -Value $row.B
+        $obj | add-member -Type NoteProperty -Name C -Value $row.C
+        $obj | add-member -Type NoteProperty -Name D -Value $row.D
+        $obj | add-member -Type NoteProperty -Name E -Value $row.E
+       
+        #  $row | get-member
+        
+    $rep_table += $obj
+    }
+    
+    
+    $rep_table | Export-Csv -NoTypeInformation $Sql_Query_path\SqlSecurityReport_$SQLServer.csv -Delimiter ";"
+    <# 
+    $rep_table | Out-PTSPDF `
+                 -AutoSize `
+                 -FontSize 6 `
+                 -IncludeHeader `
+                 -HeaderText "SQL Server Security Check report $SQLServer" `
+                 -Path $Sql_Query_path\SqlSecuretyReport_$SQLServer.pdf
+     #>
+
+     $Import = Import-Csv $Sql_Query_path\SqlSecurityReport_$SQLServer.csv -UseCulture
+
+     Function Using-Culture ( 
+            [System.Globalization.CultureInfo]$culture = (throw "USAGE: Using-Culture -Culture culture -Script {scriptblock}"), 
+            [ScriptBlock]$script= (throw "USAGE: Using-Culture -Culture culture -Script {scriptblock}")) 
+            { 
+                $OldCulture = [System.Threading.Thread]::CurrentThread.CurrentCulture 
+                trap 
+                { 
+                              [System.Threading.Thread]::CurrentThread.CurrentCulture = $OldCulture 
+                } 
+             [System.Threading.Thread]::CurrentThread.CurrentCulture = $culture 
+                Invoke-Command $script 
+             [System.Threading.Thread]::CurrentThread.CurrentCulture = $OldCulture 
+}  
+
+Using-Culture en-US {
+
+        #Открываем EXCEL
+        $Excel = New-Object -ComObject Excel.Application
+        #Делаем его видимым
+        $Excel.Visible = $true
+        #Создаем новую книгу
+        $WorkBook = $Excel.Workbooks.Add()
+        #Цепляемся к первому листу
+
+        $Item = $WorkBook.Worksheets.Item(1)
+
+        <#
+         $Excel = New-Object -comobject “Excel.Application”
+                    $Excel.visible = $true
+                    $WorkBooks =$Excel.workbooks
+                    #$newci = [System.Globalization.CultureInfo]'en-US'
+                    [System.Threading.Thread]::CurrentThread.CurrentCulture = New-Object "System.Globalization.CultureInfo" "en-US"
+                    $Item = $WorkBooks.PSBase.GetType().InvokeMember(“Add”,[Reflection.BindingFlags]::InvokeMethod, $null, $WorkBooks, $null, $newci)
+           
+                   #>
+        $Row = 1
+
+        Foreach($i in $Import ){
+            $Column=1
+            #Условие по которому проверяем заголоовок это или просто строка
+            if($i.A -like "--*"){
+                #Пропускаем строку, чтобы было расстояние между таблицами
+                $Row++
+                #Выделяем заоголовки жирным
+                $Item.Cells.Item($Row, $Column).font.bold = $true
+                #Присваеваем значение
+                $Item.Cells.Item($Row, $Column) = $i.A
+                #Объединяем ячейки
+                $Item.Range("A$Row","D$Row").Merge()
+                #Выраниваем надпись по горизонтали
+                $Item.Range("A$Row","D$Row").HorizontalAlignment = -4108
+            }
+            else{
+                #Если не заголовокЮ просто заполняем таблицу
+                $Item.Cells.Item($Row, $Column) = $i.A
+                $Column++
+                $Item.Cells.Item($Row, $Column) = $i.B
+                $Column++
+                $Item.Cells.Item($Row, $Column) = $i.C
+                $Column++
+                $Item.Cells.Item($Row, $Column) = $i.D
+                $Column++
+            }
+            $Row++
+        }
+        
+        #Подгоняем ширину столбцов
+        $UsedRange = $Item.UsedRange
+        $UsedRange.EntireColumn.AutoFit() | Out-Null
+
+        #Выключаем и включаем параметр WrapText, только так почему то эксель уберает лишнее пространство
+       #$UsedRange.EntireColumn.WrapText() = $false
+       #$UsedRange.EntireColumn.WrapText() = $true
+        
+        #Сохраняем в формате xlsx
+        $WorkBook.SaveAs("$Sql_Query_path\SqlSecurityReport_$SQLServer.xlsx")
+        
+        #Закрываем эксель
+        $Excel.Quit() 
+        }
+}
