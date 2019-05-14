@@ -1,0 +1,278 @@
+IF OBJECT_ID('tempdb..#Login_Audit ') IS NOT NULL DROP TABLE #Login_Audit 
+--GO
+create table #Login_Audit 
+(A nvarchar (500),B nvarchar (500)default (''),C nvarchar (200)default (''), D nvarchar (200)default (''),E nvarchar (200)default ('')) 
+----go 
+-- SET NOCOUNT ON SELECT LOGINPROPERTY([name], 'PasswordLastSetTime') AS 'PasswordChanged', name  FROM sys.sql_logins  ORDER BY PasswordChanged
+
+
+-----SQL SERVER Version-
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT 
+		[Security Report] = '-----SQL SERVER Version-----','-----','-----','-----','1' 
+
+		insert into #Login_Audit (A,E) 
+			select a,'1' from 
+			(select (@@version)a ) a;
+		
+
+---SQL SERVER SECURITY AUDIT Report
+			insert into #Login_Audit  (A,B,C,D,E) 
+			SELECT 
+			[Security Report] = '-----SQL SERVER SECURITY AUDIT Report-----','-----','-----','-----','2' 
+			----go   
+			insert into #Login_Audit  (A,B,C,D,E) 
+			SELECT 
+			[Login count] = 'Total Count of Users','Windows User','SQL server User','Windows Group','2' 
+			----go    Q
+ 
+			insert into #Login_Audit  
+			select a,b,c,d,'2' from 
+			(select count(name)a from sys.syslogins where name not like '%#%') a, -- total count 
+			(select count (name)b from sys.syslogins where name not like '%#%'and isntuser=1) b, --for login is windows user  
+			(select count (name)c from sys.syslogins where name not like '%#%'and isntname=0) c, -- for login is sql server login  
+			(select count (name)d from sys.syslogins where name not like '%#%'and isntgroup=1 )d; 
+			----go 
+
+-- SYSADMIN SERVER ROLE ASSIGN TO 
+			insert into #Login_Audit (A,B,C,D,E) 
+			SELECT 
+			[sysadmin_server role] = '-- SYSADMIN SERVER ROLE ASSIGN TO---',' ----- ',' ----- ',' ----- ','3' 
+			----go 
+			insert into #Login_Audit  (A,B,C,D,E) 
+			SELECT 
+			[Sys Admin role] = 'User name',' Type ',' Login Status ','','3' 
+			----go 
+			insert into #Login_Audit (A,B,C,E) 
+			SELECT a.name as Logins, a.type_desc, case a.is_disabled  
+			when 1 then 'Disable' 
+			when 0 then 'Enable' 
+			End , '3' 
+			FROM sys.server_principals a  
+			  INNER JOIN sys.server_role_members b ON a.principal_id = b.member_principal_id 
+			WHERE b.role_principal_id = 3 
+			ORDER BY a.name 
+			----go 
+			-- select * from #Login_Audit
+-- FIXED SERVER ROLE DETAILS 
+			insert into #Login_Audit  (A,B,C,D,E) 
+			SELECT 
+			[Fixed_server role] = '-- FIXED SERVER ROLE DETAILS --',' ----- ',' ----- ',' ----- ','4'
+			----go 
+			insert into #Login_Audit  (A,B,C,D,E) 
+			SELECT 
+			[Fixed_server role] = 'ROLE name',' Members ',' Type ','','4'
+			----go 
+ 
+			insert into #Login_Audit (A,B,C,E) 
+			SELECT c.name as Fixed_roleName, a.name as logins ,a.type_desc ,'4'  
+			FROM sys.server_principals a  
+			  INNER JOIN sys.server_role_members b ON a.principal_id = b.member_principal_id 
+			  INNER JOIN sys.server_principals c ON c.principal_id = b.role_principal_id 
+			--WHERE a.principal_id > 250 
+			ORDER BY c.name  
+			----go 
+
+-- FIXED DATABASE ROLES DETAILS 
+			insert into #Login_Audit  (A,B,C,D,E) 
+			SELECT 
+			[Fixed_database_Roles] = '-- FIXED DATABASE ROLES DETAILS --',' ----- ',' ----- ',' ----- ','5'
+			----go 
+			insert into #Login_Audit  (A,B,C,D,E) 
+			SELECT 
+			[Fixed_database_Role] = 'Database Name','Role Name','Member','Type','5'
+			----go 
+			insert into #Login_Audit exec master.dbo.sp_MSforeachdb 'use [?] 
+			SELECT db_name()as DBNAME, c.name as DB_ROLE ,a.name as Role_Member, a.type_desc, ''5'' as E
+			FROM sys.database_principals a  
+			  INNER JOIN sys.database_role_members b ON a.principal_id = b.member_principal_id 
+			  INNER JOIN sys.database_principals c ON c.principal_id = b.role_principal_id 
+			WHERE a.name <> ''dbo''and c.is_fixed_role=1 ' 
+			----go 
+			------------ used is_fixed = 0 for non fixed database roles(need to run on each database) 
+			insert into #Login_Audit  (A,B,C,D,E) 
+			SELECT 
+			[NON_Fixed_database_Roles] = '-- NON FIXED DATABASE ROLES DETAILS --',' ----- ',' ----- ',' ----- ','5'
+			----go 
+			insert into #Login_Audit  (A,B,C,D,E) 
+			SELECT 
+			[Non Fixed_database role] = 'Database Name','Role Name','Member ','Type' ,'5'
+			--go 
+			insert into #Login_Audit exec master.dbo.sp_MSforeachdb 'use [?] 
+			SELECT db_name()as DBNAME, c.name as DB_ROLE ,a.name as Role_Member, a.type_desc ,''5'' as E
+			FROM sys.database_principals a  
+			  INNER JOIN sys.database_role_members b ON a.principal_id = b.member_principal_id 
+			  INNER JOIN sys.database_principals c ON c.principal_id = b.role_principal_id 
+			WHERE a.name <> ''dbo''and c.is_fixed_role=0 ' 
+			--go 
+ 
+-- SERVER LEVEL PERMISSION DETAILS
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT 
+		[Server_Level_Permission] = '-- SERVER LEVEL PERMISSION DETAILS --',' ----- ',' ----- ',' ----- ','6' 
+		--go 
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT
+		[Server permission] = 'Users','Permission Type',' Permission_desc ','Status','6'
+
+		insert into #Login_Audit  
+		SELECT b.name,a.type,a.permission_name,a.state_desc,'6'
+		FROM sys.server_permissions a  
+		  INNER JOIN sys.server_principals b ON a.grantee_principal_id = b.principal_id 
+		  --INNER JOIN sys.server_principals b ON b.principal_id = b.role_principal_id 
+		WHERE b.name not like '%#%' 
+		ORDER BY b.name 
+
+-- DATABASE LEVEL PERMISSION DETAILS
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT 
+		[DATABASE_Level_Permission] = '-- DATABASE LEVEL PERMISSION DETAILS ----',' ----- ',' ----- ',' ----- ','7' 
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT 
+		[DB permission] = 'Database Name','User Name',' Permission ','Status','7' 
+		insert into #Login_Audit 
+		 exec master.dbo.sp_MSforeachdb 'use [?] 
+		SELECT db_name () as DBNAME,b.name as users,a.permission_name,a.state_desc,''7'' as E
+		FROM sys.database_permissions a  
+		  INNER JOIN sys.database_principals b ON a.grantee_principal_id = b.principal_id 
+		  where a.class =0 and b.name <> ''dbo'' and b.name <> ''guest''and   b.name not like ''%#%''' 
+  
+-- PASSWORD POLICY DETAILS
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT 
+		[Password_ Policy_Details] = '--- PASSWORD POLICY DETAILS ----',' ----- ',' ----- ',' ----- ','8' 
+
+ 
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT 
+		[Policy] = 'Users','type',' Policy status','Password policy status','8'
+ 
+		insert into #Login_Audit 
+			SELECT a.name AS SQL_Server_Login,a.type_desc,  
+				CASE b.is_policy_checked  
+			WHEN 1 THEN 'Password Policy Applied' 
+				ELSE 
+					'Password Policy Not Applied' 
+					END AS Password_Policy_Status, 
+					CASE b.is_expiration_checked  
+					WHEN 1 THEN 'Password Expiration Check Applied' 
+				ELSE 
+					'Password Expiration Check Not Applied' 
+					END AS Password_Expiration_Check_Status ,'8'
+					FROM sys.server_principals a INNER JOIN sys.sql_logins b 
+					ON a.principal_id = b.principal_id  
+					where a.name not like '%#%' 
+					order by a.name 
+
+
+
+-- ORPHAN LOGINS
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT 
+		[Orphan_Login_Details] = '--- ORPHAN LOGINS ----',' ----- ',' ----- ',' ----- ','9' 
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT 
+		[orphan logine] = 'Logins Name','ID','','','9' 
+		insert into #Login_Audit (A,B) exec sp_validatelogins 
+
+-- ORPHAN USERS
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT 
+		[Orphan_USERS_Details] = '--- ORPHAN USERS----',' ----- ',' ----- ',' ----- ','10' 
+
+			insert into #Login_Audit  (A,B,C,D,E) 
+			SELECT 
+			[orphan users] = 'User Name','','  ','','10' 
+	
+			insert into #Login_Audit (A,E)  
+				select u.name , '10' from master..syslogins l right join  
+					sysusers u on l.sid = u.sid  
+					where l.sid is null and issqlrole <> 1 and isapprole <> 1    
+					and (u.name <> 'INFORMATION_SCHEMA' and u.name <> 'guest'   
+					and u.name <> 'system_function_schema'and u.name <> 'sys') 
+    
+-- DATABASE OWENER DETAILS
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT 
+		[Database_Owner_details] = '--- DATABASE OWENER DETAILS----',' ----- ',' ----- ',' ----- ','11' 
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT 
+		[DB owner] = 'Database Name','Owener name','  ','','11' 
+		insert into #Login_Audit (A,B,E)    
+		select name, SUSER_sNAME (owner_sid), '11' from sys.databases order by name asc 
+	
+ 
+ -- LAST PASSWORD CHANGE
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT	
+		[Last password change] = '--- LAST PASSWORD CHANGE ----',' ----- ',' ----- ',' ----- ','12' 
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT 
+		[Roles of accounts] = 'Login name','Date change','','','12' 
+		insert into #Login_Audit  (A,B,E) 
+		SELECT  name as A, CAST(LOGINPROPERTY([name], 'PasswordLastSetTime') AS nvarchar(500)),'12' AS B FROM sys.sql_logins 
+		--insert into #Login_Audit  (B)  
+		--SELECT CAST(LOGINPROPERTY([name], 'PasswordLastSetTime') AS nvarchar(500)) AS B  FROM sys.sql_logins  
+
+-- LIST OF DATABASES
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT	
+		[List of databases] = '--- LIST OF DATABASES----',' ----- ',' ----- ',' ----- ','13' 
+		insert into #Login_Audit  (A,E) 
+		SELECT name AS A,'13' FROM sysdatabases WHERE name NOT LIKE 'master' AND name NOT LIKE 'model' AND name NOT LIKE 'msdb' AND name NOT LIKE 'tempdb'
+
+-- ROLES OF ACCOUNTS
+--
+--		IF OBJECT_ID('tempdb..#Login_Audit_14 ') IS NOT NULL DROP TABLE #Login_Audit_14 
+--
+--		create table #Login_Audit_14 
+--		(A nvarchar (500),B nvarchar (500)default (''),C nvarchar (200)default (''), D nvarchar (200)default (''),E nvarchar (200)default ('')) 
+--		insert into #Login_Audit_14 (A,B,C) exec sp_helpsrvrolemember
+--
+--		insert into #Login_Audit  (A,B,C,D,E) 
+--		SELECT	
+--		[Roles of accounts] = '--- ROLES OF ACCOUNTS----',' ----- ',' ----- ',' ----- ','14' 
+--		insert into #Login_Audit  (A,B,C,D,E) 
+--		SELECT 
+--		[Roles of accounts] = 'ServerRole','MemberName','','','14' 
+--		--insert into #Login_Audit (A,B,C) exec sp_helpsrvrolemember
+--		insert into #Login_Audit (A,B,E) SELECT A, B, '14' FROM #Login_Audit_14
+--
+-- LINKED SERVERS
+		IF OBJECT_ID('tempdb..#Login_Audit_15 ') IS NOT NULL DROP TABLE #Login_Audit_15 
+
+		create table #Login_Audit_15 
+		(A nvarchar (500),B nvarchar (500)default (''),C nvarchar (200)default (''), D nvarchar (200)default (''),E nvarchar (200)default ('')) 
+		insert into #Login_Audit_15 (A,B,C,D) exec sp_helplinkedsrvlogin
+
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT	
+		[Linked servers] = '--- LINKED SERVERS ----',' ----- ',' ----- ',' ----- ','15' 
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT 
+		[Linked servers] = 'Linked Server','Local Login','Is self Mapping','Remote Login','15' 
+		-- insert into #Login_Audit (A,B,C,D) EXEC sp_helplinkedsrvlogin
+		insert into #Login_Audit (A,B,C,D,E) Select A,B,C,D,'15' from  #Login_Audit_15
+
+-- Audit Server
+		IF OBJECT_ID('tempdb..#Login_Audit_15 ') IS NOT NULL DROP TABLE #Login_Audit_16 
+
+		create table #Login_Audit_16 
+		(A nvarchar (500),B nvarchar (500)default (''),C nvarchar (200)default (''), D nvarchar (200)default (''),E nvarchar (200)default ('')) 
+		insert into #Login_Audit_16 (A,B) exec xp_instance_regread N'HKEY_LOCAL_MACHINE', N'SOFTWARE\Microsoft\MSSQLServer\MSSQLServer',N'AuditLevel'
+
+		insert into #Login_Audit  (A,B,C,D,E) 
+		SELECT	
+		[Audit Level] = '--- Audit Server ----',' ----- ',' ----- ',' ----- ','16' 
+		insert into #Login_Audit  (A,B,E) 
+		SELECT 
+		[Audit server] = 'Value','Data','16'
+		insert into #Login_Audit (A,B,E) select A, case B
+			when 0 then 'None' 
+			when 1 then 'Successful Only' 
+			when 2 then 'Failed only' 
+			when 3 then 'Failed & Successful'
+			End,		
+		    '16' from #Login_Audit_16
+
+select * from #Login_Audit
